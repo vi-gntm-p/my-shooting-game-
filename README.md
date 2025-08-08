@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>シンプルなシューティングゲーム</title>
+    <style>
+        /* スタイルのリセットと基本的な設定 */
+        body {
+            margin: 0;
+            overflow: hidden; /* スクロールバーを非表示にする */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #222; /* 暗い背景色 */
+            font-family: 'Inter', sans-serif; /* フォント設定 */
+            color: #eee;
+        }
+
+        /* ゲームコンテナのスタイル */
+        #game-container {
+            position: relative;
+            width: 80vw; /* ビューポート幅の80% */
+            max-width: 600px; /* 最大幅 */
+            height: 80vh; /* ビューポート高さの80% */
+            max-height: 800px; /* 最大高さ */
+            background-color: #000; /* ゲーム画面の背景色 */
+            border: 5px solid #0f0; /* 緑色の枠線 */
+            box-shadow: 0 0 20px rgba(0, 255, 0, 0.7); /* 緑色の影 */
+            overflow: hidden; /* 要素がはみ出さないように */
+            border-radius: 15px; /* 角を丸くする */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+
+        /* ゲームキャンバスのスタイル */
+        canvas {
+            background-color: #000;
+            display: block;
+            width: 100%;
+            height: calc(100% - 80px); /* スコアとボタンのスペースを確保 */
+            border-radius: 10px;
+            margin-bottom: 10px;
+        }
+
+        /* スコア表示のスタイル */
+        #score-display {
+            font-size: 2em;
+            color: #fff;
+            margin-bottom: 10px;
+            text-shadow: 0 0 10px #0f0;
+        }
+
+        /* メッセージボックスのスタイル */
+        #message-box {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.8);
+            border: 3px solid #0f0;
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            font-size: 1.5em;
+            color: #fff;
+            box-shadow: 0 0 25px rgba(0, 255, 0, 0.9);
+            z-index: 100;
+            display: none; /* 初期状態では非表示 */
+        }
+
+        #message-box button {
+            background-color: #0f0;
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            margin-top: 20px;
+            border-radius: 8px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.2s ease;
+            box-shadow: 0 5px 15px rgba(0, 255, 0, 0.5);
+        }
+
+        #message-box button:hover {
+            background-color: #0c0;
+            transform: translateY(-2px);
+        }
+
+        /* ゲーム操作ボタンのスタイル */
+        .controls {
+            display: flex;
+            gap: 20px;
+            margin-top: 10px;
+        }
+
+        .control-button {
+            background-color: #0f0;
+            color: #000;
+            border: none;
+            padding: 15px 25px;
+            border-radius: 10px;
+            font-size: 1.2em;
+            cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.2s ease, box-shadow 0.3s ease;
+            box-shadow: 0 5px 15px rgba(0, 255, 0, 0.5);
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .control-button:hover {
+            background-color: #0c0;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(0, 255, 0, 0.7);
+        }
+
+        .control-button:active {
+            transform: translateY(1px);
+            box-shadow: 0 2px 10px rgba(0, 255, 0, 0.3);
+        }
+
+        /* モバイル向けレスポンシブデザイン */
+        @media (max-width: 768px) {
+            #game-container {
+                width: 95vw;
+                height: 90vh;
+            }
+            #score-display {
+                font-size: 1.5em;
+            }
+            .control-button {
+                padding: 10px 15px;
+                font-size: 1em;
+            }
+            .controls {
+                flex-wrap: wrap;
+                justify-content: center;
+                gap: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="score-display">スコア: 0</div>
+        <canvas id="gameCanvas"></canvas>
+        <div class="controls">
+            <button id="leftButton" class="control-button">左へ</button>
+            <button id="shootButton" class="control-button">発射</button>
+            <button id="rightButton" class="control-button">右へ</button>
+        </div>
+        <div id="message-box">
+            <p id="message-text"></p>
+            <button id="restartButton">再スタート</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreDisplay = document.getElementById('score-display');
+        const messageBox = document.getElementById('message-box');
+        const messageText = document.getElementById('message-text');
+        const restartButton = document.getElementById('restartButton');
+        const leftButton = document.getElementById('leftButton');
+        const shootButton = document.getElementById('shootButton');
+        const rightButton = document.getElementById('rightButton');
+
+        let player;
+        let bullets = [];
+        let enemies = [];
+        let score = 0;
+        let gameOver = false;
+        let gameInterval;
+        let enemySpawnInterval;
+
+        // ゲームの初期設定とリセット
+        function initGame() {
+            // キャンバスのサイズを親要素に合わせる
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+
+            player = {
+                x: canvas.width / 2 - 25,
+                y: canvas.height - 60,
+                width: 50,
+                height: 50,
+                speed: 7,
+                color: '#00f' // 青色のプレイヤー
+            };
+
+            bullets = [];
+            enemies = [];
+            score = 0;
+            gameOver = false;
+            scoreDisplay.textContent = `スコア: ${score}`;
+            messageBox.style.display = 'none';
+
+            // 既存のインターバルをクリア
+            clearInterval(gameInterval);
+            clearInterval(enemySpawnInterval);
+
+            // ゲームループを開始
+            gameInterval = setInterval(gameLoop, 1000 / 60); // 60 FPS
+            enemySpawnInterval = setInterval(spawnEnemy, 1500); // 1.5秒ごとに敵を生成
+        }
+
+        // プレイヤーを描画
+        function drawPlayer() {
+            ctx.fillStyle = player.color;
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+
+            // プレイヤーの形状を少し複雑にする (例: 三角形のコックピット)
+            ctx.beginPath();
+            ctx.moveTo(player.x + player.width / 2, player.y);
+            ctx.lineTo(player.x, player.y + player.height);
+            ctx.lineTo(player.x + player.width, player.y + player.height);
+            ctx.closePath();
+            ctx.fillStyle = '#f00'; // 赤色のコックピット
+            ctx.fill();
+        }
+
+        // 弾を描画
+        function drawBullets() {
+            bullets.forEach(bullet => {
+                ctx.fillStyle = bullet.color;
+                ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+            });
+        }
+
+        // 敵を描画
+        function drawEnemies() {
+            enemies.forEach(enemy => {
+                if (enemy.isHit && enemy.dialogue && enemy.dialogueDisplayTime > 0) {
+                    // 敵がヒットし、セリフが表示中の場合
+                    ctx.font = '20px Arial'; // セリフのフォントサイズ
+                    ctx.fillStyle = '#fff'; // セリフの色
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'bottom';
+                    ctx.fillText(enemy.dialogue, enemy.x + enemy.width / 2, enemy.y - 5); // 敵の上に表示
+                    enemy.dialogueDisplayTime--; // タイマーを減らす
+                } else if (!enemy.isHit) {
+                    // 敵がヒットしていない場合、絵文字を描画
+                    ctx.font = '40px Arial'; // 絵文字のサイズを設定
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('👿', enemy.x + enemy.width / 2, enemy.y + enemy.height / 2);
+                }
+            });
+        }
+
+        // 弾を発射
+        function shootBullet() {
+            if (gameOver) return;
+            const bullet = {
+                // 弾のサイズを調整
+                x: player.x + player.width / 2 - 10, // より大きな弾を中央に配置するためにxを調整
+                y: player.y,
+                width: 20, // 幅を大きく
+                height: 30, // 高さを大きく
+                speed: 10,
+                color: '#ff0' // 黄色の弾
+            };
+            bullets.push(bullet);
+        }
+
+        // 敵を生成
+        function spawnEnemy() {
+            if (gameOver) return;
+            const enemy = {
+                x: Math.random() * (canvas.width - 40),
+                y: -40, // 画面外から出現
+                width: 40,
+                height: 40,
+                speed: Math.random() * 2 + 1, // 1から3のランダムな速度
+                isHit: false, // 新しいプロパティ：ヒットしたかどうか
+                dialogue: null, // 新しいプロパティ：セリフ
+                dialogueDisplayTime: 0 // 新しいプロパティ：セリフ表示時間
+            };
+            enemies.push(enemy);
+        }
+
+        // Gemini API を呼び出して敵のセリフを生成
+        async function generateEnemyDialogue(enemy) {
+            const prompt = "シューティングゲームで倒された可愛い悪魔の敵が最後に言う、短くて面白かったり、ドラマチックだったりするセリフ（日本語、最大10文字程度）を生成してください。例: 'ぐぬぬ', 'また会おう', 'やられたー', '無念', 'まだだ！'";
+            let chatHistory = [];
+            chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+            const payload = { contents: chatHistory };
+            const apiKey = ""; // Canvasが提供します
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+
+                if (result.candidates && result.candidates.length > 0 &&
+                    result.candidates[0].content && result.candidates[0].content.parts &&
+                    result.candidates[0].content.parts.length > 0) {
+                    const text = result.candidates[0].content.parts[0].text;
+                    enemy.dialogue = text.trim();
+                    enemy.dialogueDisplayTime = 60; // 1秒間表示 (60 FPSの場合)
+                } else {
+                    console.error("Gemini APIのレスポンス構造が予期せぬものか、コンテンツがありません:", result);
+                    enemy.dialogue = "ぐぬぬ..."; // フォールバック
+                    enemy.dialogueDisplayTime = 60;
+                }
+            } catch (error) {
+                console.error("Gemini APIの呼び出し中にエラーが発生しました:", error);
+                enemy.dialogue = "無念..."; // エラー時のフォールバック
+                enemy.dialogueDisplayTime = 60;
+            }
+        }
+
+        // Gemini API を呼び出してゲームオーバーメッセージを生成
+        async function generateGameOverMessage(score, reason) {
+            const prompt = `シューティングゲームでゲームオーバーになった時のメッセージを生成してください。スコアは${score}点でした。ゲームオーバーの原因は「${reason}」です。短く、少しユーモラスか、あるいはドラマチックなメッセージ（日本語、最大30文字程度）を生成してください。例: '残念！また挑戦してね！', '宇宙の藻屑と消えた...', '君の冒険はここで終わった...'`;
+            let chatHistory = [];
+            chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+            const payload = { contents: chatHistory };
+            const apiKey = ""; // Canvasが提供します
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+
+                if (result.candidates && result.candidates.length > 0 &&
+                    result.candidates[0].content && result.candidates[0].content.parts &&
+                    result.candidates[0].content.parts.length > 0) {
+                    return result.candidates[0].content.parts[0].text.trim();
+                } else {
+                    console.error("Gemini APIのレスポンス構造が予期せぬものか、コンテンツがありません:", result);
+                    return `ゲームオーバー！スコア: ${score}点。`; // フォールバック
+                }
+            } catch (error) {
+                console.error("Gemini APIの呼び出し中にエラーが発生しました:", error);
+                return `ゲームオーバー！スコア: ${score}点。`; // エラー時のフォールバック
+            }
+        }
+
+        // 衝突判定
+        function checkCollision(obj1, obj2) {
+            return obj1.x < obj2.x + obj2.width &&
+                   obj1.x + obj1.width > obj2.x &&
+                   obj1.y < obj2.y + obj2.height &&
+                   obj1.y + obj1.height > obj2.y;
+        }
+
+        // ゲームオーバー処理
+        async function endGame(reason) { // reason引数を追加
+            gameOver = true;
+            clearInterval(gameInterval);
+            clearInterval(enemySpawnInterval);
+            messageText.textContent = "メッセージ生成中..."; // ロード中メッセージ
+            messageBox.style.display = 'block';
+
+            // Gemini APIを呼び出してゲームオーバーメッセージを生成
+            const finalMessage = await generateGameOverMessage(score, reason);
+            messageText.textContent = finalMessage;
+        }
+
+        // ゲームループ
+        function gameLoop() {
+            if (gameOver) return;
+
+            // キャンバスをクリア
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // ボタンからのプレイヤー移動を処理
+            handlePlayerMovement();
+
+            // プレイヤーの移動 (キーボード入力)
+            if (keys.ArrowLeft || keys.a) {
+                player.x -= player.speed;
+            }
+            if (keys.ArrowRight || keys.d) {
+                player.x += player.speed;
+            }
+
+            // プレイヤーが画面外に出ないように制限
+            if (player.x < 0) player.x = 0;
+            if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
+
+            // 弾の更新
+            bullets.forEach(bullet => {
+                bullet.y -= bullet.speed;
+            });
+
+            // 衝突判定 (弾と敵) と弾のフィルタリング
+            const activeBullets = [];
+            bullets.forEach(bullet => {
+                let bulletHit = false;
+                enemies.forEach(enemy => {
+                    // 敵がまだヒットしていない場合のみ衝突判定を行う
+                    if (!enemy.isHit && checkCollision(bullet, enemy)) {
+                        enemy.isHit = true; // ヒットしたとマーク
+                        generateEnemyDialogue(enemy); // セリフを生成
+                        score += 10;
+                        scoreDisplay.textContent = `スコア: ${score}`;
+                        bulletHit = true; // この弾は敵に当たった
+                    }
+                });
+                if (!bulletHit) {
+                    activeBullets.push(bullet); // 敵に当たらなかった弾は残す
+                }
+            });
+            bullets = activeBullets.filter(bullet => bullet.y >= 0); // 画面外に出た弾を削除
+
+            // 敵の更新とフィルタリング
+            enemies.forEach(enemy => {
+                // ヒットしていない敵のみ移動させる
+                if (!enemy.isHit) {
+                    enemy.y += enemy.speed;
+                }
+            });
+
+            enemies = enemies.filter(enemy => {
+                // 画面下部に到達した敵はゲームオーバー
+                if (enemy.y > canvas.height) {
+                    endGame(`敵が画面を突破しました`); // ゲームオーバー原因を渡す
+                    return false; // この敵を削除
+                }
+                // ヒットし、セリフ表示時間が終わった敵は削除
+                if (enemy.isHit && enemy.dialogueDisplayTime <= 0) {
+                    return false; // この敵を削除
+                }
+                return true; // この敵を残す
+            });
+
+            // 衝突判定 (プレイヤーと敵)
+            enemies.forEach(enemy => {
+                if (!enemy.isHit && checkCollision(player, enemy)) { // ヒットしていない敵のみチェック
+                    endGame(`敵に当たってしまいました`); // ゲームオーバー原因を渡す
+                }
+            });
+
+            // 描画
+            drawBullets();
+            drawEnemies(); // 敵のセリフ表示ロジックを含む
+            drawPlayer();
+        }
+
+        // キーボード入力の状態を管理
+        const keys = {};
+        window.addEventListener('keydown', (e) => {
+            keys[e.key] = true;
+            if (e.key === ' ' || e.key === 'Spacebar') { // スペースキーで発射
+                shootBullet();
+            }
+        });
+        window.addEventListener('keyup', (e) => {
+            keys[e.key] = false;
+        });
+
+        // ボタン操作
+        let leftPressed = false;
+        let rightPressed = false;
+
+        function handlePlayerMovement() {
+            if (leftPressed) {
+                player.x -= player.speed;
+            }
+            if (rightPressed) {
+                player.x += player.speed;
+            }
+            // プレイヤーが画面外に出ないように制限
+            if (player.x < 0) player.x = 0;
+            if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
+        }
+
+        leftButton.addEventListener('touchstart', (e) => { e.preventDefault(); leftPressed = true; });
+        leftButton.addEventListener('touchend', (e) => { e.preventDefault(); leftPressed = false; });
+        leftButton.addEventListener('mousedown', () => { leftPressed = true; });
+        leftButton.addEventListener('mouseup', () => { rightPressed = false; }); // Fix for touchend
+        leftButton.addEventListener('mouseleave', () => { leftPressed = false; }); // マウスがボタンから離れた時
+
+        rightButton.addEventListener('touchstart', (e) => { e.preventDefault(); rightPressed = true; });
+        rightButton.addEventListener('touchend', (e) => { e.preventDefault(); rightPressed = false; });
+        rightButton.addEventListener('mousedown', () => { rightPressed = true; });
+        rightButton.addEventListener('mouseup', () => { rightPressed = false; });
+        rightButton.addEventListener('mouseleave', () => { rightPressed = false; });
+
+        shootButton.addEventListener('touchstart', (e) => { e.preventDefault(); shootBullet(); });
+        shootButton.addEventListener('click', shootBullet);
+
+        restartButton.addEventListener('click', initGame);
+
+        // ウィンドウのリサイズ時にキャンバスサイズを調整
+        window.addEventListener('resize', () => {
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+            // プレイヤーの位置を再調整 (中央に)
+            player.x = canvas.width / 2 - player.width / 2;
+            player.y = canvas.height - 60;
+        });
+
+        // ゲーム開始
+        window.onload = initGame;
+    </script>
+</body>
+</html>
